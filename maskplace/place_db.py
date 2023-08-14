@@ -1,23 +1,22 @@
 import numpy as np
 import os
+import random
 from operator import itemgetter
 from itertools import combinations
-
+from place_db_proto import get_node_info
+from place_db_proto import get_net_info
 import sys
-if os.path.exists('benchmark/ariane'):
-    sys.path.append('benchmark/ariane')
-    from ariane.read_info import get_netlist_info_dict
-    from place_db_proto import get_node_info
-    from place_db_proto import get_net_info
-
+import pickle
+sys.path.append('ariane')
+from ariane.read_info import get_netlist_info_dict
+# Macro dict (macro id -> name, x, y)
 
 def read_node_file(fopen, benchmark):
     node_info = {}
     node_info_raw_id_name ={}
-    port_info = {}
     node_cnt = 0
     for line in fopen.readlines():
-        if not line.startswith("\t") and not line.startswith(" "):
+        if not line.startswith("\t"):
             continue
         line = line.strip().split()
         if line[-1] != "terminal":
@@ -28,9 +27,8 @@ def read_node_file(fopen, benchmark):
         node_info[node_name] = {"id": node_cnt, "x": x , "y": y }
         node_info_raw_id_name[node_cnt] = node_name
         node_cnt += 1
-
     print("len node_info", len(node_info))
-    return node_info, node_info_raw_id_name, port_info    
+    return node_info, node_info_raw_id_name
 
 
 def read_net_file(fopen, node_info):
@@ -38,8 +36,7 @@ def read_net_file(fopen, node_info):
     net_name = None
     net_cnt = 0
     for line in fopen.readlines():
-        if not line.startswith("\t") and not line.startswith("  ") and \
-            not line.startswith("NetDegree"):
+        if not line.startswith("\t") and not line.startswith("NetDegree"):
             continue
         line = line.strip().split()
         if line[0] == "NetDegree":
@@ -51,16 +48,11 @@ def read_net_file(fopen, node_info):
                     net_info[net_name] = {}
                     net_info[net_name]["nodes"] = {}
                     net_info[net_name]["ports"] = {}
-                if not node_name.startswith("p") and not node_name in net_info[net_name]["nodes"]:
+                if not node_name in net_info[net_name]["nodes"]:
                     x_offset = float(line[-2])
                     y_offset = float(line[-1])
                     net_info[net_name]["nodes"][node_name] = {}
                     net_info[net_name]["nodes"][node_name] = {"x_offset": x_offset, "y_offset": y_offset}
-                elif node_name.startswith("p") and node_name in net_info[net_name]["ports"]:
-                    x_offset = float(line[-2])
-                    y_offset = float(line[-1])
-                    net_info[net_name]["ports"][node_name] = {}
-                    net_info[net_name]["ports"][node_name] = {"x_offset": x_offset, "y_offset": y_offset}
     for net_name in list(net_info.keys()):
         if len(net_info[net_name]["nodes"]) <= 1:
             net_info.pop(net_name)
@@ -102,7 +94,6 @@ def get_port_to_net_dict(port_info, net_info):
             port_to_net_dict[port_name].add(net_name)
     return port_to_net_dict
 
-
 def read_pl_file(fopen, node_info):
     max_height = 0
     max_width = 0
@@ -120,17 +111,6 @@ def read_pl_file(fopen, node_info):
         node_info[node_name]["raw_x"] = place_x
         node_info[node_name]["raw_y"] = place_y
     return max(max_height, max_width), max(max_height, max_width)
-
-
-def read_scl_file(fopen, benchmark):
-    assert "ibm" in benchmark
-    for line in fopen.readlines():
-        if not "Numsites" in line:
-            continue
-        line = line.strip().split()
-        max_height = int(line[-1])
-        break
-    return max_height, max_height
 
 
 def get_node_id_to_name(node_info, node_to_net_dict):
@@ -203,43 +183,40 @@ def get_node_id_to_name_topology(node_info, node_to_net_dict, net_info, benchmar
                 candidates[node_name] = 0
         if len(candidates) > 0:
             if benchmark != 'ariane':
-                add_node = max(candidates, key = lambda v: candidates[v]*1 + node_net_num[v]*1000 +\
-                    node_info[v]['x']*node_info[v]['y'] * 1 +int(hash(v)%10000)*1e-6)
+                if benchmark == "bigblue3":
+                    add_node = max(candidates, key = lambda v: candidates[v]*1 + node_net_num[v]*100000 +\
+                        node_info[v]['x']*node_info[v]['y'] * 1 +int(hash(v)%10000)*1e-6)
+                else:
+                    add_node = max(candidates, key = lambda v: candidates[v]*1 + node_net_num[v]*1000 +\
+                        node_info[v]['x']*node_info[v]['y'] * 1 +int(hash(v)%10000)*1e-6)
             else:
                 add_node = max(candidates, key = lambda v: candidates[v]*30000 + node_net_num[v]*1000 +\
                     node_info[v]['x']*node_info[v]['y']*1 +int(hash(v)%10000)*1e-6)
         else:
-            add_node = max(node_net_num, key = lambda v: node_net_num[v]*1000 + node_info[v]['x']*node_info[v]['y']*1)
+            if benchmark != 'ariane':
+                if benchmark == "bigblue3":
+                    add_node = max(node_net_num, key = lambda v: node_net_num[v]*100000 + node_info[v]['x']*node_info[v]['y']*1)
+                else:
+                    add_node = max(node_net_num, key = lambda v: node_net_num[v]*1000 + node_info[v]['x']*node_info[v]['y']*1)
+            else:
+                add_node = max(node_net_num, key = lambda v: node_net_num[v]*1000 + node_info[v]['x']*node_info[v]['y']*1)
 
         visited_node.add(add_node)
-        node_id_to_name.append((add_node, node_net_num[add_node]))
+        node_id_to_name.append((add_node, node_net_num[add_node])) 
         node_net_num.pop(add_node)
     for i, (node_name, _) in enumerate(node_id_to_name):
         node_info[node_name]["id"] = i
-    print("node_id_to_name")
-    print(node_id_to_name)
+    # print("node_id_to_name")
+    # print(node_id_to_name)
     node_id_to_name_res = [x for x, _ in node_id_to_name]
     return node_id_to_name_res
 
 
-def get_pin_cnt(net_info):
-    pin_cnt = 0
-    for net_name in net_info:
-        pin_cnt += len(net_info[net_name]["nodes"])
-    return pin_cnt
-
-
-def get_total_area(node_info):
-    area = 0
-    for node_name in node_info:
-        area += node_info[node_name]["x"] * node_info[node_name]["y"]
-    return area
-
-
 class PlaceDB():
+
     def __init__(self, benchmark = "adaptec1"):
         self.benchmark = benchmark
-        if benchmark == "ariane":
+        if benchmark == "ariane" or benchmark == "sample_clustered":
             path = benchmark + '/netlist.pb.txt'
             pbtxt = get_netlist_info_dict(path)
             self.node_info, self.node_info_raw_id_name = get_node_info(pbtxt)
@@ -249,41 +226,32 @@ class PlaceDB():
             self.max_height, self.max_width = 357, 357
             self.port_to_net_dict = get_port_to_net_dict(self.port_info, self.net_info)
         else:
-            assert os.path.exists(os.path.join("benchmark", benchmark))
-            node_file = open(os.path.join("benchmark", benchmark, benchmark+".nodes"), "r")
-            self.node_info, self.node_info_raw_id_name, self.port_info = read_node_file(node_file, benchmark)
-            pl_file = open(os.path.join("benchmark", benchmark, benchmark+".pl"), "r")
+            assert os.path.exists(benchmark)
+            node_file = open(os.path.join(benchmark, benchmark+".nodes"), "r")
+            self.node_info, self.node_info_raw_id_name = read_node_file(node_file, benchmark)
+            pl_file = open(os.path.join(benchmark, benchmark+".pl"), "r")
+            self.port_info = {}
             self.node_cnt = len(self.node_info)
             node_file.close()
-            net_file = open(os.path.join("benchmark", benchmark, benchmark+".nets"), "r")
+            net_file = open(os.path.join(benchmark, benchmark+".nets"), "r")
             self.net_info = read_net_file(net_file, self.node_info)
             self.net_cnt = len(self.net_info)
             net_file.close()
-            pl_file = open(os.path.join("benchmark", benchmark, benchmark+".pl"), "r")
+            pl_file = open(os.path.join(benchmark, benchmark+".pl"), "r")
             self.max_height, self.max_width = read_pl_file(pl_file, self.node_info)
             pl_file.close()
-            if not "ibm" in benchmark:
-                self.port_to_net_dict = {}
-            else:
-                self.port_to_net_dict = get_port_to_net_dict(self.port_info, self.net_info)
-                scl_file = open(os.path.join("benchmark", benchmark, benchmark+".scl"), "r")
-                self.max_height, self.max_width = read_scl_file(scl_file, benchmark)
-
+            self.port_to_net_dict = {}
         self.node_to_net_dict = get_node_to_net_dict(self.node_info, self.net_info)
         self.node_id_to_name = get_node_id_to_name_topology(self.node_info, self.node_to_net_dict, self.net_info, self.benchmark)
-        self.node_name_to_id =  dict((t, i) for i, t in enumerate(self.node_id_to_name))
-    
+
     def debug_str(self):
         print("node_cnt = {}".format(len(self.node_info)))
         print("net_cnt = {}".format(len(self.net_info)))
         print("max_height = {}".format(self.max_height))
         print("max_width = {}".format(self.max_width))
-        print("pin_cnt = {}".format(get_pin_cnt(self.net_info)))
-        print("port_cnt = {}".format(len(self.port_info)))
-        print("area_ratio = {}".format(get_total_area(self.node_info)/(self.max_height*self.max_height)))
 
 
 if __name__ == "__main__":
-    placedb = PlaceDB("adaptec1")
+    placedb = PlaceDB("ariane")
     placedb.debug_str()
 
