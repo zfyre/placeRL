@@ -1,4 +1,4 @@
-## MaskPlace: Fast Chip Placement via Reinforced  Visual Representation Learning
+## PlaceRL: Fast Chip Placement via Reinforced  Visual Representation Learning
 
 A new chip placement method based on visual representation learning. 
 
