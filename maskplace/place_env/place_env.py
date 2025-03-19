@@ -19,6 +19,15 @@ class PlaceEnv(gym.Env):
         print("placedb.net_cnt", placedb.net_cnt)
         assert grid * grid >= placedb.node_cnt 
         self.grid = grid
+
+        # Define your observation space correctly here
+        num_state = 1 + grid*grid*5 + 2  # from PPO2.py provided
+        
+        # Example assuming continuous observations:
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(num_state,), dtype=np.float32
+        )
+                                            
         self.max_height = placedb.max_height
         self.max_width = placedb.max_width
         self.placedb = placedb

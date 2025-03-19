@@ -4,7 +4,7 @@ from collections import namedtuple
 
 import os
 
-from maskplace.nnet import MyCNN, MyCNNCoarse
+from nnet import MyCNN, MyCNNCoarse
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import numpy as np

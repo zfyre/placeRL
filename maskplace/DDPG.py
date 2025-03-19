@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
-from maskplace.nnet import MyCNN, MyCNNCoarse
+from nnet import MyCNN, MyCNNCoarse
 from PPO2 import Actor, Critic  # Reuse PPO2's network architectures
 import place_env
 import torchvision
@@ -202,7 +202,7 @@ def main():
         os.mkdir("logs")
     fwrite = open(log_file_name, "w")
     load_model_path = None
-    
+
     if load_model_path:
         agent.load_param(load_model_path)
         
