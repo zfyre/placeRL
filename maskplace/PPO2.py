@@ -160,7 +160,7 @@ class PPO():
         self.gcn = None
         self.resnet = torchvision.models.resnet18(pretrained=True)
         self.cnn = MyCNN().to(device)
-        self.cnn_coarse = MyCNNCoarse(self.resnet).to(device)
+        self.cnn_coarse = MyCNNCoarse(self.resnet, device).to(device)
         self.actor_net = Actor(cnn = self.cnn, gcn = self.gcn, cnn_coarse = self.cnn_coarse).float().to(device)
         self.critic_net = Critic(cnn = self.cnn, gcn = self.gcn,  cnn_coarse = None, res_net = self.resnet).float().to(device)
         self.buffer = []
