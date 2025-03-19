@@ -45,7 +45,7 @@ http://www.cerc.utexas.edu/~zixuan/ispd2005dp.tar.xz
 - [protobuf](https://pypi.org/project/protobuf/) (for benchmark *ariane* (protobuf==3.20))
 
  
-### The placement process animation
+<!-- ### The placement process animation
 
 Benchmark: Bigblue3
 
@@ -100,4 +100,4 @@ Fix macros and use DREAMPlace (classic optimization-based method) to place stand
 |Overlap|<strong>0.78%</strong>|3.72%|38.91%|1.94%|
 
 
-
+ -->
