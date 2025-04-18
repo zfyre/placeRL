@@ -19,7 +19,7 @@ message AttrValue {
       int64 i = 3;                 // "int"
       float f = 4;                 // "float"
       bool b = 5;                  // "bool"
-      DataType type = 6;           // "type"
+    // DataType type = 6;           // "type"
     //   TensorShapeProto shape = 7;  // "shape"
     //   TensorProto tensor = 8;      // "tensor"
     //   ListValue list = 1;          // any "list(...)"

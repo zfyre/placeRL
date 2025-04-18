@@ -107,7 +107,10 @@ def get_net_info(pbtxt):
 
                 
 def main():
-    path = 'ariane/netlist.pb.txt'
+    # path = 'ariane/netlist.pb.txt'
+    # path = 'toy_macro_stdcell/netlist.pb.txt'
+    path = 'macro_tiles_10x10/netlist.pb.txt'
+
     pbtxt = get_netlist_info_dict(path)
     node_info = get_node_info(pbtxt)
     net_info, port_info = get_net_info(pbtxt)

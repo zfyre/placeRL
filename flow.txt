@@ -1,0 +1,4 @@
+1. comp_res.py : computes the hpwl, cost (rewards) for our RL Module
+2. DDPG.py and PPO2.py : RL agent implementation
+3. nnet.py : Convolutional Neural Network (CNN) implementation
+4. 
