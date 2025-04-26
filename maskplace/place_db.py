@@ -8,6 +8,7 @@ from place_db_proto import get_net_info
 import sys
 import pickle
 sys.path.append('ariane')
+sys.path.append('macro_tiles_10x10')
 from ariane.read_info import get_netlist_info_dict
 # Macro dict (macro id -> name, x, y)
 
@@ -216,7 +217,7 @@ class PlaceDB():
 
     def __init__(self, benchmark = "adaptec1"):
         self.benchmark = benchmark
-        if benchmark == "ariane" or benchmark == "sample_clustered":
+        if benchmark == "ariane" or benchmark == "sample_clustered" or benchmark == "macro_tiles_10x10":
             path = benchmark + '/netlist.pb.txt'
             pbtxt = get_netlist_info_dict(path)
             self.node_info, self.node_info_raw_id_name = get_node_info(pbtxt)
@@ -252,6 +253,7 @@ class PlaceDB():
 
 
 if __name__ == "__main__":
-    placedb = PlaceDB("ariane")
+    # placedb = PlaceDB("ariane")
+    placedb = PlaceDB("macro_tiles_10x10")
     placedb.debug_str()
 

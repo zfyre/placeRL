@@ -31,11 +31,17 @@ def get_net_info(pbtxt):
     net_info = {}
     net_name = None
     net_cnt = 0
+
     pin_cnt = 0
     pin_info = {}
+
     port_info = {}
+
+    std_cell_info = {}
+    std_cell_cnt = 0
+
     for node in pbtxt.node:
-        if node.attr['type'].placeholder.upper() == "MACRO":
+        if node.attr['type'].placeholder.upper() == "MACRO": 
             continue
         pin_name = node.name
         if node.attr['type'].placeholder.upper() == "PORT":
@@ -48,8 +54,25 @@ def get_net_info(pbtxt):
             y_offset = float(node.attr['y_offset'].f)
             pin_info[pin_name] = {"node_name": macro_name, "x_offset": x_offset, "y_offset": y_offset}
             pin_cnt += 1
+        elif node.attr['type'].placeholder.upper() == "STDCELL":
+            std_cell_name = node.name
+            width = float(node.attr['width'].f)
+            height = float(node.attr['height'].f)
+            x = float(node.attr['x'].f)
+            y = float(node.attr['y'].f)
+            if std_cell_name not in std_cell_info:
+                std_cell_info[std_cell_name] = {}
+                std_cell_info[std_cell_name]["width"] = width
+                std_cell_info[std_cell_name]["height"] = height
+                std_cell_info[std_cell_name]["x"] = x
+                std_cell_info[std_cell_name]["y"] = y
+                std_cell_info[std_cell_name]["id"] = std_cell_cnt
+                std_cell_cnt += 1
+            continue
     print("pin_cnt = {}".format(pin_cnt))
+
     for node in pbtxt.node:
+        # print("node = {}".format(node))
         net_name = node.name
         if node.attr['type'].placeholder.upper() == "MACRO":
             continue
@@ -60,7 +83,9 @@ def get_net_info(pbtxt):
             net_info[net_name]["weight"] = float(node.attr['weight'].f)
         else:
             net_info[net_name]["weight"] = 1.0
+
         for pin_name in node.input:
+            # print("pin_name = {}".format(pin_name))
             if pin_name in port_info:
                 assert pin_name not in net_info[net_name]["ports"]
                 net_info[net_name]["ports"][pin_name] = {}
@@ -77,8 +102,11 @@ def get_net_info(pbtxt):
                 net_info[net_name]["nodes"][node_name] = {}
                 net_info[net_name]["nodes"][node_name]["x_offset"] = pin_info[pin_name]["x_offset"]
                 net_info[net_name]["nodes"][node_name]["y_offset"] = pin_info[pin_name]["y_offset"]
+            elif pin_name in std_cell_info:
+                print("Skipping std_cell pin_name = {}".format(pin_name))
             else:
                 assert False
+
         out_pin_name = net_name
         if out_pin_name in port_info:
             assert out_pin_name not in net_info[net_name]["ports"]
@@ -91,6 +119,8 @@ def get_net_info(pbtxt):
             net_info[net_name]["nodes"][node_name] = {}
             net_info[net_name]["nodes"][node_name]["x_offset"] = pin_info[out_pin_name]["x_offset"]
             net_info[net_name]["nodes"][node_name]["y_offset"] = pin_info[out_pin_name]["y_offset"]
+        elif out_pin_name in std_cell_info:
+            print("Skipping std_cell out_pin_name = {}".format(out_pin_name))
         else:
             print("out_pin_name = {}".format(out_pin_name))
             assert False
@@ -99,6 +129,7 @@ def get_net_info(pbtxt):
         if len(net_info[net_name]["nodes"]) + \
             len(net_info[net_name]["ports"]) <= 1:
             net_info.pop(net_name)
+
     for net_name in net_info:
         net_info[net_name]['id'] = net_cnt
         net_cnt += 1
@@ -106,15 +137,22 @@ def get_net_info(pbtxt):
     return net_info, port_info
 
                 
-def main():
+def main(path: str):
     # path = 'ariane/netlist.pb.txt'
     # path = 'toy_macro_stdcell/netlist.pb.txt'
-    path = 'macro_tiles_10x10/netlist.pb.txt'
+    # path = 'macro_tiles_10x10/netlist.pb.txt'
 
+    print("PATH = {}".format(path))
+    ###############
     pbtxt = get_netlist_info_dict(path)
     node_info = get_node_info(pbtxt)
     net_info, port_info = get_net_info(pbtxt)
 
 
 if __name__ == "__main__":
-    main()
+    # ariane_path = 'ariane/netlist.pb.txt'
+    # main(ariane_path)
+    # toy_macro_stdcell_path = 'toy_macro_stdcell/netlist.pb.txt'
+    # main(toy_macro_stdcell_path)
+    macro_tiles_10x10_path = 'macro_tiles_10x10/netlist.pb.txt'
+    main(macro_tiles_10x10_path)

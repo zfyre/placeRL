@@ -29,7 +29,7 @@ from comp_res import comp_res
 from torch.utils.tensorboard import SummaryWriter   
 
 # set device to cpu or cuda
-device = torch.device('cuda')
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 if(torch.cuda.is_available()): 
     device = torch.device('cuda:0') 
@@ -56,11 +56,12 @@ parser.add_argument('--benchmark', type=str, default='adaptec1')
 parser.add_argument('--soft_coefficient', type=float, default = 1)
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--is_test', action='store_true', default=False)
-parser.add_argument('--save_fig', action='store_true', default=False)
+parser.add_argument('--save_fig', action='store_true', default=True)
 args = parser.parse_args()
 writer = SummaryWriter('./tb_log')
 
-benchmark = args.benchmark
+# benchmark = args.benchmark
+benchmark = "macro_tiles_10x10"
 placedb = PlaceDB(benchmark)
 grid = 224
 placed_num_macro = args.pnm
@@ -79,7 +80,10 @@ def seed_torch(seed=0):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.manual_seed(seed)
-    env.seed(seed)
+    try:
+        env.seed(seed)
+    except:
+        pass
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
