@@ -324,13 +324,13 @@ def main():
         print("score = {}, raw_score = {}".format(score, raw_score))
 
         # Saving every 10 epoch
-        if i_epoch % 8 == 0:
+        if i_epoch % 100 == 0:
             if args.save_fig:
                 strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-                if not os.path.exists("figures"):
-                    os.mkdir("figures")
-                env.save_fig("./figures/{}{}.png".format(strftime_now,int(raw_score)))
-                print("save_figure: figures/{}{}.png".format(strftime_now,int(raw_score)))
+                if not os.path.exists("figures_ckpt"):
+                    os.mkdir("figures_ckpt")
+                env.save_fig("./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
+                print("save_figure: figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
 
         if running_reward > best_reward * 0.975:
             best_reward = running_reward
