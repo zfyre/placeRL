@@ -26,7 +26,7 @@ import time
 from tqdm import tqdm
 import random
 from comp_res import comp_res
-from torch.utils.tensorboard import SummaryWriter   
+import wandb
 
 # set device to cpu or cuda
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -57,8 +57,24 @@ parser.add_argument('--soft_coefficient', type=float, default = 1)
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--is_test', action='store_true', default=False)
 parser.add_argument('--save_fig', action='store_true', default=True)
+parser.add_argument('--wandb_project', type=str, default='placerl', help='Weights & Biases project name')
+parser.add_argument('--wandb_entity', type=str, default=None, help='Weights & Biases entity name')
 args = parser.parse_args()
-writer = SummaryWriter('./tb_log')
+
+# Initialize wandb
+wandb.init(
+    project=args.wandb_project,
+    entity=args.wandb_entity,
+    config={
+        "learning_rate": args.lr,
+        "gamma": args.gamma,
+        "batch_size": args.batch_size,
+        "placed_num_macro": args.pnm,
+        "benchmark": args.benchmark,
+        "seed": args.seed
+    },
+    mode="online"
+)
 
 benchmark = args.benchmark
 placedb = PlaceDB(benchmark)
@@ -250,8 +266,11 @@ class PPO():
                 nn.utils.clip_grad_norm_(self.critic_net.parameters(), self.max_grad_norm)
                 self.critic_net_optimizer.step()
 
-                writer.add_scalar('action_loss', action_loss, self.training_step)
-                writer.add_scalar('value_loss', value_loss, self.training_step)
+                wandb.log({
+                    'action_loss': action_loss.item(),
+                    'value_loss': value_loss.item(),
+                    'training_step': self.training_step
+                })
 
 
 def save_placement(file_path, node_pos, ratio):
@@ -385,11 +404,16 @@ def main():
             print("Epoch {}, Moving average score is: {:.2f} ".format(i_epoch, running_reward))
             fwrite.write("{},{},{:.2f},{}\n".format(i_epoch, score, running_reward, agent.training_step))
             fwrite.flush()
-        writer.add_scalar('reward', running_reward, i_epoch)
+            wandb.log({
+                'reward': running_reward,
+                'score': score,
+                'epoch': i_epoch
+            })
         if running_reward > -100:
             print("Solved! Moving average score is now {}!".format(running_reward))
             env.close()
             agent.save_param()
+            wandb.finish()
             break
         if i_epoch % 100 == 0:
             if placed_num_macro is None:
