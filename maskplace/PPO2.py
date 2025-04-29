@@ -352,7 +352,7 @@ def main():
                 print("save_figure: figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
 
         # Save checkpoint every 1000 epochs
-        if i_epoch % 1000 == 0:
+        if i_epoch % 1000 == 0 and i_epoch != 0 :
             strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
             if not os.path.exists("checkpoints"):
                 os.mkdir("checkpoints")
@@ -375,6 +375,11 @@ def main():
                     # cost is the routing estimation based on the MST algorithm
                     hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
                     print("hpwl = {:.2f}\tcost = {:.2f}".format(hpwl, cost))
+                    wandb.log({
+                        'hpwl': hpwl,
+                        'cost': cost,
+                        'epoch': i_epoch
+                    })
                 except:
                     assert False
         
@@ -382,6 +387,11 @@ def main():
             print("save node_pos")
             hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
             print("hpwl = {:.2f}\tcost = {:.2f}".format(hpwl, cost))
+            wandb.log({
+                'hpwl': hpwl,
+                'cost': cost,
+                'epoch': i_epoch
+            })
             print("time = {}s".format(end-start))
             pl_file_path = "{}-{}-{}.pl".format(benchmark, int(hpwl), time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) ) 
             save_placement(pl_file_path, env.node_pos, env.ratio)
