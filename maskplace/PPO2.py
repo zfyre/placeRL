@@ -39,10 +39,10 @@ else:
     print("Device set to : cpu")
 
 # Parameters
-parser = argparse.ArgumentParser(description='Solve the Pendulum-v0 with PPO')
+parser = argparse.ArgumentParser(description='Solve the Chip Placement with PPO')
 parser.add_argument(
-    '--gamma', type=float, default=0.95, metavar='G', help='discount factor (default: 0.9)')
-parser.add_argument('--seed', type=int, default=42, metavar='N', help='random seed (default: 0)')
+    '--gamma', type=float, default=0.95, metavar='G', help='discount factor (default: 0.95)')
+parser.add_argument('--seed', type=int, default=42, metavar='N', help='random seed (default: 42)')
 parser.add_argument('--disable_tqdm', type=int, default=1)
 parser.add_argument('--lr', type=float, default=2.5e-3)
 parser.add_argument(
@@ -52,7 +52,7 @@ parser.add_argument(
     metavar='N',
     help='interval between training status logs (default: 10)')
 parser.add_argument('--pnm', type=int, default=128)
-parser.add_argument('--benchmark', type=str, default='adaptec1')
+parser.add_argument('--benchmark', type=str, default='macro_tiles_10x10', help='Choose the benchmark from adaptec1, macro_tiles_10x10, ariane')
 parser.add_argument('--soft_coefficient', type=float, default = 1)
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--is_test', action='store_true', default=False)
@@ -60,11 +60,10 @@ parser.add_argument('--save_fig', action='store_true', default=True)
 args = parser.parse_args()
 writer = SummaryWriter('./tb_log')
 
-# benchmark = args.benchmark
-benchmark = "macro_tiles_10x10"
+benchmark = args.benchmark
 placedb = PlaceDB(benchmark)
 grid = 224
-placed_num_macro = args.pnm
+placed_num_macro = args.pnm # Imporatant Parameter: Handles how many macros to be placed in grid before resetting the reward to 0.
 if args.pnm > placedb.node_cnt:
     placed_num_macro = placedb.node_cnt
     args.pnm = placed_num_macro
@@ -286,7 +285,7 @@ def main():
     if not os.path.exists("logs"):
         os.mkdir("logs")
     fwrite = open(log_file_name, "w")
-    load_model_path = None
+    load_model_path = None #TODO I can save the ckpt and load it later
    
     if load_model_path:
        agent.load_param(load_model_path)
@@ -323,6 +322,15 @@ def main():
             running_reward = score
         running_reward = running_reward * 0.9 + score * 0.1
         print("score = {}, raw_score = {}".format(score, raw_score))
+
+        # Saving every 10 epoch
+        if i_epoch % 8 == 0:
+            if args.save_fig:
+                strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+                if not os.path.exists("figures"):
+                    os.mkdir("figures")
+                env.save_fig("./figures/{}{}.png".format(strftime_now,int(raw_score)))
+                print("save_figure: figures/{}{}.png".format(strftime_now,int(raw_score)))
 
         if running_reward > best_reward * 0.975:
             best_reward = running_reward
