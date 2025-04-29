@@ -323,7 +323,7 @@ def main():
         running_reward = running_reward * 0.9 + score * 0.1
         print("score = {}, raw_score = {}".format(score, raw_score))
 
-        # Saving every 10 epoch
+        # Saving every 100 epoch
         if i_epoch % 100 == 0:
             if args.save_fig:
                 strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
@@ -331,6 +331,15 @@ def main():
                     os.mkdir("figures_ckpt")
                 env.save_fig("./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
                 print("save_figure: figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
+
+        # Save checkpoint every 1000 epochs
+        if i_epoch % 1000 == 0:
+            strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+            if not os.path.exists("checkpoints"):
+                os.mkdir("checkpoints")
+            checkpoint_path = f"./checkpoints/checkpoint_epoch_{i_epoch}_{strftime_now}.pkl"
+            agent.save_param(running_reward)
+            print(f"Saved checkpoint at epoch {i_epoch} to {checkpoint_path}")
 
         if running_reward > best_reward * 0.975:
             best_reward = running_reward
