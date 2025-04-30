@@ -348,8 +348,16 @@ def main():
                 strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
                 if not os.path.exists("figures_ckpt"):
                     os.mkdir("figures_ckpt")
-                env.save_fig("./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
+                fig_path = "./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score))
+                env.save_fig(fig_path)
+                wandb.log({"placement_figure_ckpt": wandb.Image(fig_path)})
                 print("save_figure: figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
+                if not os.path.exists("figures"):
+                    os.mkdir("figures")
+                fig_path = "./figures/{}{}.png".format(strftime_now,int(raw_score))
+                env.save_fig(fig_path)
+                wandb.log({"placement_figure": wandb.Image(fig_path)})
+                print("save_figure: figures/{}{}.png".format(strftime_now,int(raw_score)))
 
         # Save checkpoint every 1000 epochs
         if i_epoch % 1000 == 0 and i_epoch != 0 :
@@ -366,9 +374,17 @@ def main():
                 agent.save_param(running_reward)
                 if args.save_fig:
                     strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+                    if not os.path.exists("figures_ckpt"):
+                        os.mkdir("figures_ckpt")
+                    fig_path = "./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score))
+                    env.save_fig(fig_path)
+                    wandb.log({"placement_figure_ckpt": wandb.Image(fig_path)})
+                    print("save_figure: figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
                     if not os.path.exists("figures"):
                         os.mkdir("figures")
-                    env.save_fig("./figures/{}{}.png".format(strftime_now,int(raw_score)))
+                    fig_path = "./figures/{}{}.png".format(strftime_now,int(raw_score))
+                    env.save_fig(fig_path)
+                    wandb.log({"placement_figure": wandb.Image(fig_path)})
                     print("save_figure: figures/{}{}.png".format(strftime_now,int(raw_score)))
                 try:
                     print("start try")
@@ -407,7 +423,9 @@ def main():
                 fwrite_pl.write("{}\t{:.4f}\t{:.4f}\n".format(node_name, x, y))
             fwrite_pl.close()
             strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-            env.save_fig("./figures/{}-{}-{}-{}.png".format(benchmark, strftime_now, int(hpwl), int(cost)))
+            fig_path = "./figures/{}-{}-{}-{}.png".format(benchmark, strftime_now, int(hpwl), int(cost))
+            env.save_fig(fig_path)
+            wandb.log({"final_placement_figure": wandb.Image(fig_path)})
         
         training_records.append(TrainingRecord(i_epoch, running_reward))
 
