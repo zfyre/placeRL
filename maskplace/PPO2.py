@@ -417,7 +417,9 @@ def main():
             wandb.log({
                 'reward': running_reward,
                 'score': score,
-                'epoch': i_epoch
+                'epoch': i_epoch,
+                'hpwl': hpwl,
+                'cost': cost
             })
         if running_reward > -100:
             print("Solved! Moving average score is now {}!".format(running_reward))
