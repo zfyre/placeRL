@@ -410,10 +410,12 @@ def main():
             env.save_fig("./figures/{}-{}-{}-{}.png".format(benchmark, strftime_now, int(hpwl), int(cost)))
         
         training_records.append(TrainingRecord(i_epoch, running_reward))
+
         if i_epoch % 1 ==0:
             print("Epoch {}, Moving average score is: {:.2f} ".format(i_epoch, running_reward))
             fwrite.write("{},{},{:.2f},{}\n".format(i_epoch, score, running_reward, agent.training_step))
             fwrite.flush()
+            hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
             wandb.log({
                 'reward': running_reward,
                 'score': score,
@@ -421,12 +423,14 @@ def main():
                 'hpwl': hpwl,
                 'cost': cost
             })
+
         if running_reward > -100:
             print("Solved! Moving average score is now {}!".format(running_reward))
             env.close()
             agent.save_param()
             wandb.finish()
             break
+
         if i_epoch % 100 == 0:
             if placed_num_macro is None:
                 env.write_gl_file("./gl/{}{}.gl".format(strftime, int(score)))
