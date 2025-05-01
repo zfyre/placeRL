@@ -475,12 +475,20 @@ def main():
             fwrite.write("{},{},{:.2f},{}\n".format(i_epoch, score, running_reward, agent.training_step))
             fwrite.flush()
             hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
+            
+            # Calculate additional metrics
+            canvas = env.state[1:1+env.grid*env.grid].reshape(env.grid, env.grid)
+            metrics = calculate_metrics(env, canvas)
+            
             wandb.log({
                 'reward': running_reward,
                 'score': score,
                 'epoch': i_epoch,
                 'hpwl': hpwl,
-                'cost': cost
+                'cost': cost,
+                'congestion': metrics['congestion'],
+                'density': metrics['density'],
+                'overlap_percentage': metrics['overlap_percentage']
             })
 
         if running_reward > -100:
