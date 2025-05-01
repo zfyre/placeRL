@@ -3,6 +3,8 @@ import pickle
 from collections import namedtuple
 
 import os
+# Set OpenMP environment variable to avoid duplicate runtime error
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 from nnet import MyCNN, MyCNNCoarse
 
