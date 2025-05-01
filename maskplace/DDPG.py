@@ -50,7 +50,7 @@ parser.add_argument(
     metavar='N',
     help='interval between training status logs (default: 10)')
 parser.add_argument('--pnm', type=int, default=128)
-parser.add_argument('--benchmark', type=str, default='adaptec1')
+parser.add_argument('--benchmark', type=str, default='macro_tiles_10x10', help='Choose the benchmark from adaptec1, macro_tiles_10x10, ariane')
 parser.add_argument('--soft_coefficient', type=float, default = 1)
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--is_test', action='store_true', default=False)
@@ -489,8 +489,16 @@ def main():
             break
 
         if i_epoch % 100 == 0:
-            if placed_num_macro is None:
-                env.write_gl_file("./gl/{}{}.gl".format(strftime, int(score)))
+            if args.save_fig:
+                # Save to figures_ckpt directory
+                fig_path = "./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score))
+                env.save_fig(fig_path)
+                wandb.log({"placement_figure_ckpt": wandb.Image(fig_path)})
+                
+                # Save to figures directory
+                fig_path = "./figures/{}{}.png".format(strftime_now,int(raw_score))
+                env.save_fig(fig_path)
+                wandb.log({"placement_figure": wandb.Image(fig_path)})
 
 if __name__ == '__main__':
     main()
