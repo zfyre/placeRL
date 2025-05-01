@@ -293,6 +293,29 @@ def save_placement(file_path, node_pos, ratio):
     print(".pl has been saved to {}.".format(file_path))
 
 
+def calculate_metrics(env, canvas):
+    # Calculate congestion (using RUDY)
+    congestion = np.mean(np.abs(env.rudy))
+    
+    # Calculate density
+    total_area = env.grid * env.grid
+    occupied_area = np.sum(canvas > 0)
+    density = occupied_area / total_area
+    
+    # Calculate overlap
+    overlap_count = 0
+    for node_name in env.node_pos:
+        x, y, size_x, size_y = env.node_pos[node_name]
+        overlap_count += np.sum(canvas[x:x+size_x, y:y+size_y] > 1.0)
+    overlap_percentage = (overlap_count / total_area) * 100 if total_area > 0 else 0
+    
+    return {
+        'congestion': congestion,
+        'density': density,
+        'overlap_percentage': overlap_percentage
+    }
+
+
 def main():
 
     agent = PPO()
@@ -393,9 +416,17 @@ def main():
                     # cost is the routing estimation based on the MST algorithm
                     hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
                     print("hpwl = {:.2f}\tcost = {:.2f}".format(hpwl, cost))
+                    
+                    # Calculate additional metrics
+                    canvas = env.state[1:1+env.grid*env.grid].reshape(env.grid, env.grid)
+                    metrics = calculate_metrics(env, canvas)
+                    
                     wandb.log({
                         'hpwl': hpwl,
                         'cost': cost,
+                        'congestion': metrics['congestion'],
+                        'density': metrics['density'],
+                        'overlap_percentage': metrics['overlap_percentage'],
                         'epoch': i_epoch
                     })
                 except:
@@ -405,9 +436,17 @@ def main():
             print("save node_pos")
             hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
             print("hpwl = {:.2f}\tcost = {:.2f}".format(hpwl, cost))
+            
+            # Calculate additional metrics
+            canvas = env.state[1:1+env.grid*env.grid].reshape(env.grid, env.grid)
+            metrics = calculate_metrics(env, canvas)
+            
             wandb.log({
                 'hpwl': hpwl,
                 'cost': cost,
+                'congestion': metrics['congestion'],
+                'density': metrics['density'],
+                'overlap_percentage': metrics['overlap_percentage'],
                 'epoch': i_epoch
             })
             print("time = {}s".format(end-start))

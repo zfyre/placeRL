@@ -152,7 +152,9 @@ def main(path: str):
 if __name__ == "__main__":
     # ariane_path = 'ariane/netlist.pb.txt'
     # main(ariane_path)
+
     # toy_macro_stdcell_path = 'toy_macro_stdcell/netlist.pb.txt'
     # main(toy_macro_stdcell_path)
+
     macro_tiles_10x10_path = 'macro_tiles_10x10/netlist.pb.txt'
     main(macro_tiles_10x10_path)
