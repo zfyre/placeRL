@@ -2,3 +2,5 @@
 /maskplace/logs/
 /maskplace/tb_log/
 /maskplace/wandb/
+/maskplace/figures
+/maskplace/figures_ckpt
