@@ -131,7 +131,7 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, cnn, gcn, cnn_coarse, res_net):
         super(Critic, self).__init__()
-        self.fc1 = nn.Linear(64 + grid * grid, 512)  # Added action dimension
+        self.fc1 = nn.Linear(64 + 1, 512)  # Changed from 64 + grid * grid to 64 + 1 since action is a single value
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 1)
         self.pos_emb = nn.Embedding(1400, 64)
@@ -139,7 +139,15 @@ class Critic(nn.Module):
         self.gcn = gcn
 
     def forward(self, x, action, graph = None, cnn_res = None, gcn_res = None, graph_node = None):
-        x1 = F.relu(self.fc1(torch.cat([self.pos_emb(x[:, 0].long()), action], dim=1)))
+        # Ensure action is the right shape (batch_size x 1)
+        if len(action.shape) == 1:
+            action = action.unsqueeze(1)
+        
+        # Get position embedding and ensure it's the right shape
+        pos_emb = self.pos_emb(x[:, 0].long())  # Shape: (batch_size, 64)
+        
+        # Concatenate position embedding with action
+        x1 = F.relu(self.fc1(torch.cat([pos_emb, action], dim=1)))
         x2 = F.relu(self.fc2(x1))
         value = self.fc3(x2)
         return value
