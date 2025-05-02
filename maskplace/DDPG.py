@@ -145,10 +145,10 @@ class Critic(nn.Module):
         return value
 
 class DDPG():
-    buffer_capacity = 5000  # Reduced from 10000 to 5000
-    batch_size = args.batch_size
+    buffer_capacity = 2000  # Further reduced from 5000 to 2000
+    batch_size = 16  # Further reduced from 32 to 16
     max_grad_norm = 0.5
-    update_frequency = 10
+    update_frequency = 5  # Reduced from 10 to 5 to update more frequently
 
     def __init__(self):
         super(DDPG, self).__init__()
@@ -192,75 +192,98 @@ class DDPG():
         if len(self.buffer) < self.batch_size:
             return
 
-        # Convert buffer to tensors and move to device
-        state = torch.tensor(np.array([t.state for t in self.buffer]), dtype=torch.float)
-        action = torch.tensor(np.array([t.action for t in self.buffer]), dtype=torch.float).view(-1, 1).to(device)
-        reward = torch.tensor(np.array([t.reward for t in self.buffer]), dtype=torch.float).view(-1, 1).to(device)
-        next_state = torch.tensor(np.array([t.next_state for t in self.buffer]), dtype=torch.float)
-        
-        # Clear buffer early to free memory
-        del self.buffer[:]
-        torch.cuda.empty_cache()  # Clear GPU cache
-        
-        # Sample mini-batch
-        for index in BatchSampler(SubsetRandomSampler(range(len(state))), self.batch_size, True):
-            self.training_step += 1
+        try:
+            # Convert buffer to tensors and move to device
+            state = torch.tensor(np.array([t.state for t in self.buffer]), dtype=torch.float)
+            action = torch.tensor(np.array([t.action for t in self.buffer]), dtype=torch.float).view(-1, 1).to(device)
+            reward = torch.tensor(np.array([t.reward for t in self.buffer]), dtype=torch.float).view(-1, 1).to(device)
+            next_state = torch.tensor(np.array([t.next_state for t in self.buffer]), dtype=torch.float)
             
-            # Get batch data
-            state_batch = state[index].to(device)
-            next_state_batch = next_state[index].to(device)
-            reward_batch = reward[index]
-            action_batch = action[index]
-            
-            # Compute target Q value using target networks
-            with torch.no_grad():
-                next_action_probs, _, _ = self.actor_target(next_state_batch)
-                next_action = torch.argmax(next_action_probs, dim=1).unsqueeze(1)
-                target_Q = self.critic_target(next_state_batch, next_action)
-                target_Q = reward_batch + args.gamma * target_Q
-            
-            # Update critic
-            current_Q = self.critic_net(state_batch, action_batch)
-            critic_loss = F.mse_loss(current_Q, target_Q.detach())
-            
-            self.critic_optimizer.zero_grad()
-            critic_loss.backward()
-            nn.utils.clip_grad_norm_(self.critic_net.parameters(), self.max_grad_norm)
-            self.critic_optimizer.step()
-            
-            # Update actor using deterministic policy gradient
-            action_probs, _, _ = self.actor_net(state_batch)
-            actor_loss = -self.critic_net(state_batch, action_probs).mean()
-            
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            nn.utils.clip_grad_norm_(self.actor_net.parameters(), self.max_grad_norm)
-            self.actor_optimizer.step()
-            
-            # Soft update target networks
-            for target_param, param in zip(self.actor_target.parameters(), self.actor_net.parameters()):
-                target_param.data.copy_(args.tau * param.data + (1.0 - args.tau) * target_param.data)
-                
-            for target_param, param in zip(self.critic_target.parameters(), self.critic_net.parameters()):
-                target_param.data.copy_(args.tau * param.data + (1.0 - args.tau) * target_param.data)
-            
-            # Enhanced logging
-            wandb.log({
-                'critic_loss': critic_loss.item(),
-                'actor_loss': actor_loss.item(),
-                'training_step': self.training_step,
-                'target_q_mean': target_Q.mean().item(),
-                'current_q_mean': current_Q.mean().item(),
-                'reward_mean': reward_batch.mean().item(),
-                'actor_grad_norm': torch.nn.utils.clip_grad_norm_(self.actor_net.parameters(), float('inf')).item(),
-                'critic_grad_norm': torch.nn.utils.clip_grad_norm_(self.critic_net.parameters(), float('inf')).item(),
-                'actor_lr': self.actor_optimizer.param_groups[0]['lr'],
-                'critic_lr': self.critic_optimizer.param_groups[0]['lr']
-            })
-            
-            # Clear some memory after each batch
-            del state_batch, next_state_batch, reward_batch, action_batch, current_Q, target_Q
+            # Clear buffer early to free memory
+            del self.buffer[:]
             torch.cuda.empty_cache()
+            
+            # Process in smaller chunks to reduce memory usage
+            chunk_size = min(256, len(state))  # Process at most 256 samples at a time
+            for chunk_start in range(0, len(state), chunk_size):
+                chunk_end = min(chunk_start + chunk_size, len(state))
+                state_chunk = state[chunk_start:chunk_end]
+                next_state_chunk = next_state[chunk_start:chunk_end]
+                action_chunk = action[chunk_start:chunk_end]
+                reward_chunk = reward[chunk_start:chunk_end]
+                
+                # Sample mini-batch
+                for index in BatchSampler(SubsetRandomSampler(range(len(state_chunk))), self.batch_size, True):
+                    self.training_step += 1
+                    
+                    # Get batch data
+                    state_batch = state_chunk[index].to(device)
+                    next_state_batch = next_state_chunk[index].to(device)
+                    reward_batch = reward_chunk[index]
+                    action_batch = action_chunk[index]
+                    
+                    # Compute target Q value using target networks
+                    with torch.no_grad():
+                        next_action_probs, _, _ = self.actor_target(next_state_batch)
+                        next_action = torch.argmax(next_action_probs, dim=1).unsqueeze(1)
+                        target_Q = self.critic_target(next_state_batch, next_action)
+                        target_Q = reward_batch + args.gamma * target_Q
+                    
+                    # Update critic
+                    current_Q = self.critic_net(state_batch, action_batch)
+                    critic_loss = F.mse_loss(current_Q, target_Q.detach())
+                    
+                    self.critic_optimizer.zero_grad()
+                    critic_loss.backward()
+                    nn.utils.clip_grad_norm_(self.critic_net.parameters(), self.max_grad_norm)
+                    self.critic_optimizer.step()
+                    
+                    # Update actor using deterministic policy gradient
+                    action_probs, _, _ = self.actor_net(state_batch)
+                    actor_loss = -self.critic_net(state_batch, action_probs).mean()
+                    
+                    self.actor_optimizer.zero_grad()
+                    actor_loss.backward()
+                    nn.utils.clip_grad_norm_(self.actor_net.parameters(), self.max_grad_norm)
+                    self.actor_optimizer.step()
+                    
+                    # Soft update target networks
+                    for target_param, param in zip(self.actor_target.parameters(), self.actor_net.parameters()):
+                        target_param.data.copy_(args.tau * param.data + (1.0 - args.tau) * target_param.data)
+                        
+                    for target_param, param in zip(self.critic_target.parameters(), self.critic_net.parameters()):
+                        target_param.data.copy_(args.tau * param.data + (1.0 - args.tau) * target_param.data)
+                    
+                    # Enhanced logging
+                    wandb.log({
+                        'critic_loss': critic_loss.item(),
+                        'actor_loss': actor_loss.item(),
+                        'training_step': self.training_step,
+                        'target_q_mean': target_Q.mean().item(),
+                        'current_q_mean': current_Q.mean().item(),
+                        'reward_mean': reward_batch.mean().item(),
+                        'actor_grad_norm': torch.nn.utils.clip_grad_norm_(self.actor_net.parameters(), float('inf')).item(),
+                        'critic_grad_norm': torch.nn.utils.clip_grad_norm_(self.critic_net.parameters(), float('inf')).item(),
+                        'actor_lr': self.actor_optimizer.param_groups[0]['lr'],
+                        'critic_lr': self.critic_optimizer.param_groups[0]['lr']
+                    })
+                    
+                    # Clear some memory after each batch
+                    del state_batch, next_state_batch, reward_batch, action_batch, current_Q, target_Q
+                    torch.cuda.empty_cache()
+                
+                # Clear chunk memory
+                del state_chunk, next_state_chunk, action_chunk, reward_chunk
+                torch.cuda.empty_cache()
+                
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                if hasattr(torch.cuda, 'empty_cache'):
+                    torch.cuda.empty_cache()
+                print("WARNING: out of memory, clearing cache and continuing")
+                return
+            else:
+                raise e
 
     def load_param(self, path):
         checkpoint = torch.load(path, map_location=torch.device(device))
@@ -319,6 +342,13 @@ def calculate_metrics(env, canvas):
     }
 
 def main():
+    # Set memory growth
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        # Set memory growth to True to prevent TF from allocating all GPU memory at once
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+    
     agent = DDPG()
     strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
     
@@ -339,73 +369,48 @@ def main():
         torch.inference_mode()
         
     for i_epoch in range(100000):
-        score = 0
-        raw_score = 0
-        start = time.time()
-        state = env.reset()
-        
-        done = False
-        while not done:
-            # Decay epsilon over time
-            epsilon = max(0.01, 0.1 * (1.0 - i_epoch / 1000))
-            action, action_log_prob = agent.select_action(state, epsilon)
-            next_state, reward, done, info = env.step(action)
+        try:
+            score = 0
+            raw_score = 0
+            start = time.time()
+            state = env.reset()
             
-            if not args.is_test:
-                # Scale reward less aggressively
-                trans = Transition(state, action, reward/100.0, action_log_prob, next_state, 0)
-                if agent.store_transition(trans):
-                    agent.update()
-                    
-            score += reward
-            raw_score += info["raw_reward"]
-            state = next_state
-            
-        end = time.time()
+            done = False
+            while not done:
+                # Decay epsilon over time
+                epsilon = max(0.01, 0.1 * (1.0 - i_epoch / 1000))
+                action, action_log_prob = agent.select_action(state, epsilon)
+                next_state, reward, done, info = env.step(action)
+                
+                if not args.is_test:
+                    # Scale reward less aggressively
+                    trans = Transition(state, action, reward/100.0, action_log_prob, next_state, 0)
+                    if agent.store_transition(trans):
+                        agent.update()
+                        
+                score += reward
+                raw_score += info["raw_reward"]
+                state = next_state
+                
+                # Clear some memory after each step
+                if done:
+                    del state, next_state
+                    torch.cuda.empty_cache()
+                
+            end = time.time()
 
-        if i_epoch == 0:
-            running_reward = score
-        running_reward = running_reward * 0.9 + score * 0.1
-        print("score = {}, raw_score = {}".format(score, raw_score))
+            if i_epoch == 0:
+                running_reward = score
+            running_reward = running_reward * 0.9 + score * 0.1
+            print("score = {}, raw_score = {}".format(score, raw_score))
 
-        # Periodic memory cleanup
-        if i_epoch % 10 == 0:  # Every 10 epochs
-            torch.cuda.empty_cache()
-            gc.collect()  # Add garbage collection
+            # More frequent memory cleanup
+            if i_epoch % 5 == 0:  # Every 5 epochs
+                torch.cuda.empty_cache()
+                gc.collect()
 
-        # Saving every 100 epoch
-        if i_epoch % 100 == 0:
-            if args.save_fig:
-                strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-                if not os.path.exists("figures_ckpt"):
-                    os.mkdir("figures_ckpt")
-                fig_path = "./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score))
-                env.save_fig(fig_path)
-                wandb.log({"placement_figure_ckpt": wandb.Image(fig_path)})
-                print("save_figure: figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
-                if not os.path.exists("figures"):
-                    os.mkdir("figures")
-                fig_path = "./figures/{}{}.png".format(strftime_now,int(raw_score))
-                env.save_fig(fig_path)
-                wandb.log({"placement_figure": wandb.Image(fig_path)})
-                print("save_figure: figures/{}{}.png".format(strftime_now,int(raw_score)))
-
-        # Save checkpoint every 1000 epochs
-        if i_epoch % 1000 == 0 and i_epoch != 0:
-            strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-            if not os.path.exists("checkpoints"):
-                os.mkdir("checkpoints")
-            checkpoint_path = f"./checkpoints/checkpoint_epoch_{i_epoch}_{strftime_now}.pkl"
-            agent.save_param(running_reward)
-            print(f"Saved checkpoint at epoch {i_epoch} to {checkpoint_path}")
-            # Clear memory after saving checkpoint
-            torch.cuda.empty_cache()
-            gc.collect()
-
-        if running_reward > best_reward * 0.975:
-            best_reward = running_reward
-            if i_epoch >= 10:
-                agent.save_param(running_reward)
+            # Saving every 100 epoch
+            if i_epoch % 100 == 0:
                 if args.save_fig:
                     strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
                     if not os.path.exists("figures_ckpt"):
@@ -420,104 +425,144 @@ def main():
                     env.save_fig(fig_path)
                     wandb.log({"placement_figure": wandb.Image(fig_path)})
                     print("save_figure: figures/{}{}.png".format(strftime_now,int(raw_score)))
-                try:
-                    print("start try")
-                    # cost is the routing estimation based on the MST algorithm
-                    hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
-                    print("hpwl = {:.2f}\tcost = {:.2f}".format(hpwl, cost))
-                    
-                    # Calculate additional metrics
-                    canvas = env.state[1:1+env.grid*env.grid].reshape(env.grid, env.grid)
-                    metrics = calculate_metrics(env, canvas)
-                    
-                    wandb.log({
-                        'hpwl': hpwl,
-                        'cost': cost,
-                        'congestion': metrics['congestion'],
-                        'density': metrics['density'],
-                        'overlap_percentage': metrics['overlap_percentage'],
-                        'epoch': i_epoch
-                    })
-                except:
-                    assert False
-        
-        if args.is_test:
-            print("save node_pos")
-            hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
-            print("hpwl = {:.2f}\tcost = {:.2f}".format(hpwl, cost))
-            
-            # Calculate additional metrics
-            canvas = env.state[1:1+env.grid*env.grid].reshape(env.grid, env.grid)
-            metrics = calculate_metrics(env, canvas)
-            
-            wandb.log({
-                'hpwl': hpwl,
-                'cost': cost,
-                'congestion': metrics['congestion'],
-                'density': metrics['density'],
-                'overlap_percentage': metrics['overlap_percentage'],
-                'epoch': i_epoch
-            })
-            print("time = {}s".format(end-start))
-            pl_file_path = "{}-{}-{}.pl".format(benchmark, int(hpwl), time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) ) 
-            save_placement(pl_file_path, env.node_pos, env.ratio)
-            strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-            pl_path = 'gg_place_new/{}-{}-{}-{}.pl'.format(benchmark, strftime_now, int(hpwl), int(cost))
-            fwrite_pl = open(pl_path, 'w')
-            for node_name in env.node_pos:
-                if node_name == "V":
-                    continue
-                x, y, size_x, size_y = env.node_pos[node_name]
-                x = x * env.ratio + placedb.node_info[node_name]['x'] /2.0
-                y = y * env.ratio + placedb.node_info[node_name]['y'] /2.0
-                fwrite_pl.write("{}\t{:.4f}\t{:.4f}\n".format(node_name, x, y))
-            fwrite_pl.close()
-            strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-            fig_path = "./figures/{}-{}-{}-{}.png".format(benchmark, strftime_now, int(hpwl), int(cost))
-            env.save_fig(fig_path)
-            wandb.log({"final_placement_figure": wandb.Image(fig_path)})
-        
-        training_records.append(TrainingRecord(i_epoch, running_reward))
 
-        if i_epoch % 1 ==0:
-            print("Epoch {}, Moving average score is: {:.2f} ".format(i_epoch, running_reward))
-            fwrite.write("{},{},{:.2f},{}\n".format(i_epoch, score, running_reward, agent.training_step))
-            fwrite.flush()
-            hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
-            
-            # Calculate additional metrics
-            canvas = env.state[1:1+env.grid*env.grid].reshape(env.grid, env.grid)
-            metrics = calculate_metrics(env, canvas)
-            
-            wandb.log({
-                'reward': running_reward,
-                'score': score,
-                'epoch': i_epoch,
-                'hpwl': hpwl,
-                'cost': cost,
-                'congestion': metrics['congestion'],
-                'density': metrics['density'],
-                'overlap_percentage': metrics['overlap_percentage']
-            })
+            # Save checkpoint every 1000 epochs
+            if i_epoch % 1000 == 0 and i_epoch != 0:
+                strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+                if not os.path.exists("checkpoints"):
+                    os.mkdir("checkpoints")
+                checkpoint_path = f"./checkpoints/checkpoint_epoch_{i_epoch}_{strftime_now}.pkl"
+                agent.save_param(running_reward)
+                print(f"Saved checkpoint at epoch {i_epoch} to {checkpoint_path}")
+                # Clear memory after saving checkpoint
+                torch.cuda.empty_cache()
+                gc.collect()
 
-        if running_reward > -100:
-            print("Solved! Moving average score is now {}!".format(running_reward))
-            env.close()
-            agent.save_param()
-            wandb.finish()
-            break
-
-        if i_epoch % 100 == 0:
-            if args.save_fig:
-                # Save to figures_ckpt directory
-                fig_path = "./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score))
-                env.save_fig(fig_path)
-                wandb.log({"placement_figure_ckpt": wandb.Image(fig_path)})
+            if running_reward > best_reward * 0.975:
+                best_reward = running_reward
+                if i_epoch >= 10:
+                    agent.save_param(running_reward)
+                    if args.save_fig:
+                        strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+                        if not os.path.exists("figures_ckpt"):
+                            os.mkdir("figures_ckpt")
+                        fig_path = "./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score))
+                        env.save_fig(fig_path)
+                        wandb.log({"placement_figure_ckpt": wandb.Image(fig_path)})
+                        print("save_figure: figures_ckpt/{}{}.png".format(strftime_now,int(raw_score)))
+                        if not os.path.exists("figures"):
+                            os.mkdir("figures")
+                        fig_path = "./figures/{}{}.png".format(strftime_now,int(raw_score))
+                        env.save_fig(fig_path)
+                        wandb.log({"placement_figure": wandb.Image(fig_path)})
+                        print("save_figure: figures/{}{}.png".format(strftime_now,int(raw_score)))
+                    try:
+                        print("start try")
+                        # cost is the routing estimation based on the MST algorithm
+                        hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
+                        print("hpwl = {:.2f}\tcost = {:.2f}".format(hpwl, cost))
+                        
+                        # Calculate additional metrics
+                        canvas = env.state[1:1+env.grid*env.grid].reshape(env.grid, env.grid)
+                        metrics = calculate_metrics(env, canvas)
+                        
+                        wandb.log({
+                            'hpwl': hpwl,
+                            'cost': cost,
+                            'congestion': metrics['congestion'],
+                            'density': metrics['density'],
+                            'overlap_percentage': metrics['overlap_percentage'],
+                            'epoch': i_epoch
+                        })
+                    except:
+                        assert False
+            
+            if args.is_test:
+                print("save node_pos")
+                hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
+                print("hpwl = {:.2f}\tcost = {:.2f}".format(hpwl, cost))
                 
-                # Save to figures directory
-                fig_path = "./figures/{}{}.png".format(strftime_now,int(raw_score))
+                # Calculate additional metrics
+                canvas = env.state[1:1+env.grid*env.grid].reshape(env.grid, env.grid)
+                metrics = calculate_metrics(env, canvas)
+                
+                wandb.log({
+                    'hpwl': hpwl,
+                    'cost': cost,
+                    'congestion': metrics['congestion'],
+                    'density': metrics['density'],
+                    'overlap_percentage': metrics['overlap_percentage'],
+                    'epoch': i_epoch
+                })
+                print("time = {}s".format(end-start))
+                pl_file_path = "{}-{}-{}.pl".format(benchmark, int(hpwl), time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) ) 
+                save_placement(pl_file_path, env.node_pos, env.ratio)
+                strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+                pl_path = 'gg_place_new/{}-{}-{}-{}.pl'.format(benchmark, strftime_now, int(hpwl), int(cost))
+                fwrite_pl = open(pl_path, 'w')
+                for node_name in env.node_pos:
+                    if node_name == "V":
+                        continue
+                    x, y, size_x, size_y = env.node_pos[node_name]
+                    x = x * env.ratio + placedb.node_info[node_name]['x'] /2.0
+                    y = y * env.ratio + placedb.node_info[node_name]['y'] /2.0
+                    fwrite_pl.write("{}\t{:.4f}\t{:.4f}\n".format(node_name, x, y))
+                fwrite_pl.close()
+                strftime_now = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+                fig_path = "./figures/{}-{}-{}-{}.png".format(benchmark, strftime_now, int(hpwl), int(cost))
                 env.save_fig(fig_path)
-                wandb.log({"placement_figure": wandb.Image(fig_path)})
+                wandb.log({"final_placement_figure": wandb.Image(fig_path)})
+            
+            training_records.append(TrainingRecord(i_epoch, running_reward))
+
+            if i_epoch % 1 ==0:
+                print("Epoch {}, Moving average score is: {:.2f} ".format(i_epoch, running_reward))
+                fwrite.write("{},{},{:.2f},{}\n".format(i_epoch, score, running_reward, agent.training_step))
+                fwrite.flush()
+                hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
+                
+                # Calculate additional metrics
+                canvas = env.state[1:1+env.grid*env.grid].reshape(env.grid, env.grid)
+                metrics = calculate_metrics(env, canvas)
+                
+                wandb.log({
+                    'reward': running_reward,
+                    'score': score,
+                    'epoch': i_epoch,
+                    'hpwl': hpwl,
+                    'cost': cost,
+                    'congestion': metrics['congestion'],
+                    'density': metrics['density'],
+                    'overlap_percentage': metrics['overlap_percentage']
+                })
+
+            if running_reward > -100:
+                print("Solved! Moving average score is now {}!".format(running_reward))
+                env.close()
+                agent.save_param()
+                wandb.finish()
+                break
+
+            if i_epoch % 100 == 0:
+                if args.save_fig:
+                    # Save to figures_ckpt directory
+                    fig_path = "./figures_ckpt/{}{}.png".format(strftime_now,int(raw_score))
+                    env.save_fig(fig_path)
+                    wandb.log({"placement_figure_ckpt": wandb.Image(fig_path)})
+                    
+                    # Save to figures directory
+                    fig_path = "./figures/{}{}.png".format(strftime_now,int(raw_score))
+                    env.save_fig(fig_path)
+                    wandb.log({"placement_figure": wandb.Image(fig_path)})
+                    
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                if hasattr(torch.cuda, 'empty_cache'):
+                    torch.cuda.empty_cache()
+                print("WARNING: out of memory in main loop, clearing cache and continuing")
+                continue
+            else:
+                raise e
 
 if __name__ == '__main__':
     main()
