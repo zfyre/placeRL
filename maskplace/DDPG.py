@@ -131,7 +131,7 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, cnn, gcn, cnn_coarse, res_net):
         super(Critic, self).__init__()
-        self.fc1 = nn.Linear(64 + 1, 512)  # Changed from 64 + grid * grid to 64 + 1 since action is a single value
+        self.fc1 = nn.Linear(64 + 1, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 1)
         self.pos_emb = nn.Embedding(1400, 64)
@@ -139,12 +139,16 @@ class Critic(nn.Module):
         self.gcn = gcn
 
     def forward(self, x, action, graph = None, cnn_res = None, gcn_res = None, graph_node = None):
+        # Ensure all inputs are float32
+        x = x.float()
+        action = action.float()
+        
         # Ensure action is the right shape (batch_size x 1)
         if len(action.shape) == 1:
             action = action.unsqueeze(1)
         
-        # Get position embedding and ensure it's the right shape
-        pos_emb = self.pos_emb(x[:, 0].long())  # Shape: (batch_size, 64)
+        # Get position embedding and ensure it's float32
+        pos_emb = self.pos_emb(x[:, 0].long()).float()  # Shape: (batch_size, 64)
         
         # Concatenate position embedding with action
         x1 = F.relu(self.fc1(torch.cat([pos_emb, action], dim=1)))
@@ -153,10 +157,10 @@ class Critic(nn.Module):
         return value
 
 class DDPG():
-    buffer_capacity = 2000  # Further reduced from 5000 to 2000
-    batch_size = 16  # Further reduced from 32 to 16
+    buffer_capacity = 2000
+    batch_size = 16
     max_grad_norm = 0.5
-    update_frequency = 5  # Reduced from 10 to 5 to update more frequently
+    update_frequency = 5
 
     def __init__(self):
         super(DDPG, self).__init__()
@@ -201,18 +205,18 @@ class DDPG():
             return
 
         try:
-            # Convert buffer to tensors and move to device
-            state = torch.tensor(np.array([t.state for t in self.buffer]), dtype=torch.float)
-            action = torch.tensor(np.array([t.action for t in self.buffer]), dtype=torch.float).view(-1, 1).to(device)
-            reward = torch.tensor(np.array([t.reward for t in self.buffer]), dtype=torch.float).view(-1, 1).to(device)
-            next_state = torch.tensor(np.array([t.next_state for t in self.buffer]), dtype=torch.float)
+            # Convert buffer to tensors and move to device, ensuring float32
+            state = torch.tensor(np.array([t.state for t in self.buffer]), dtype=torch.float32)
+            action = torch.tensor(np.array([t.action for t in self.buffer]), dtype=torch.float32).view(-1, 1).to(device)
+            reward = torch.tensor(np.array([t.reward for t in self.buffer]), dtype=torch.float32).view(-1, 1).to(device)
+            next_state = torch.tensor(np.array([t.next_state for t in self.buffer]), dtype=torch.float32)
             
             # Clear buffer early to free memory
             del self.buffer[:]
             torch.cuda.empty_cache()
             
             # Process in smaller chunks to reduce memory usage
-            chunk_size = min(256, len(state))  # Process at most 256 samples at a time
+            chunk_size = min(256, len(state))
             for chunk_start in range(0, len(state), chunk_size):
                 chunk_end = min(chunk_start + chunk_size, len(state))
                 state_chunk = state[chunk_start:chunk_end]
