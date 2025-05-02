@@ -23,6 +23,7 @@ import random
 from comp_res import comp_res
 from torch.utils.tensorboard import SummaryWriter
 import wandb
+import gc
 
 # set device to cpu or cuda
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -52,7 +53,7 @@ parser.add_argument(
 parser.add_argument('--pnm', type=int, default=128)
 parser.add_argument('--benchmark', type=str, default='macro_tiles_10x10', help='Choose the benchmark from adaptec1, macro_tiles_10x10, ariane')
 parser.add_argument('--soft_coefficient', type=float, default = 1)
-parser.add_argument('--batch_size', type=int, default=64)
+parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--is_test', action='store_true', default=False)
 parser.add_argument('--save_fig', action='store_true', default=True)
 parser.add_argument('--wandb_project', type=str, default='placerl', help='Weights & Biases project name')
@@ -144,15 +145,15 @@ class Critic(nn.Module):
         return value
 
 class DDPG():
-    buffer_capacity = 10000  # Larger buffer for off-policy learning
+    buffer_capacity = 5000  # Reduced from 10000 to 5000
     batch_size = args.batch_size
     max_grad_norm = 0.5
-    update_frequency = 10  # Update networks more frequently
+    update_frequency = 10
 
     def __init__(self):
         super(DDPG, self).__init__()
         self.gcn = None
-        self.resnet = torchvision.models.resnet18(weights='DEFAULT')  # Updated to use weights instead of pretrained
+        self.resnet = torchvision.models.resnet18(weights='DEFAULT')
         self.cnn = MyCNN().to(device)
         self.cnn_coarse = MyCNNCoarse(self.resnet, device).to(device)
         
@@ -191,13 +192,18 @@ class DDPG():
         if len(self.buffer) < self.batch_size:
             return
 
+        # Convert buffer to tensors and move to device
         state = torch.tensor(np.array([t.state for t in self.buffer]), dtype=torch.float)
         action = torch.tensor(np.array([t.action for t in self.buffer]), dtype=torch.float).view(-1, 1).to(device)
         reward = torch.tensor(np.array([t.reward for t in self.buffer]), dtype=torch.float).view(-1, 1).to(device)
         next_state = torch.tensor(np.array([t.next_state for t in self.buffer]), dtype=torch.float)
         
+        # Clear buffer early to free memory
+        del self.buffer[:]
+        torch.cuda.empty_cache()  # Clear GPU cache
+        
         # Sample mini-batch
-        for index in BatchSampler(SubsetRandomSampler(range(len(self.buffer))), self.batch_size, True):
+        for index in BatchSampler(SubsetRandomSampler(range(len(state))), self.batch_size, True):
             self.training_step += 1
             
             # Get batch data
@@ -251,8 +257,10 @@ class DDPG():
                 'actor_lr': self.actor_optimizer.param_groups[0]['lr'],
                 'critic_lr': self.critic_optimizer.param_groups[0]['lr']
             })
-        
-        del self.buffer[:]
+            
+            # Clear some memory after each batch
+            del state_batch, next_state_batch, reward_batch, action_batch, current_Q, target_Q
+            torch.cuda.empty_cache()
 
     def load_param(self, path):
         checkpoint = torch.load(path, map_location=torch.device(device))
@@ -277,8 +285,11 @@ class DDPG():
 
     def store_transition(self, transition):
         self.buffer.append(transition)
-        self.counter+=1
-        return self.counter % self.buffer_capacity == 0
+        self.counter += 1
+        if len(self.buffer) >= self.buffer_capacity:
+            self.update()  # Update and clear buffer when full
+            return True
+        return False
 
 def save_placement(file_path, node_pos, ratio):
     with open(file_path, "w") as f:
@@ -357,6 +368,11 @@ def main():
         running_reward = running_reward * 0.9 + score * 0.1
         print("score = {}, raw_score = {}".format(score, raw_score))
 
+        # Periodic memory cleanup
+        if i_epoch % 10 == 0:  # Every 10 epochs
+            torch.cuda.empty_cache()
+            gc.collect()  # Add garbage collection
+
         # Saving every 100 epoch
         if i_epoch % 100 == 0:
             if args.save_fig:
@@ -382,6 +398,9 @@ def main():
             checkpoint_path = f"./checkpoints/checkpoint_epoch_{i_epoch}_{strftime_now}.pkl"
             agent.save_param(running_reward)
             print(f"Saved checkpoint at epoch {i_epoch} to {checkpoint_path}")
+            # Clear memory after saving checkpoint
+            torch.cuda.empty_cache()
+            gc.collect()
 
         if running_reward > best_reward * 0.975:
             best_reward = running_reward
