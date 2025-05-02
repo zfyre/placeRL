@@ -106,16 +106,20 @@ class Actor(nn.Module):
         self.merge = nn.Conv2d(2, 1, 1)
 
     def forward(self, x, graph = None, cnn_res = None, gcn_res = None, graph_node = None):
+        # Ensure input is float32
+        x = x.float()
+        
         if not cnn_res:
             cnn_input = x[:, 1+grid*grid*1: 1+grid*grid*5].reshape(-1, 4, grid, grid)
             mask = x[:, 1+grid*grid*2: 1+grid*grid*3].reshape(-1, grid, grid)
             mask = mask.flatten(start_dim=1, end_dim=2)
             cnn_res = self.cnn(cnn_input)
             coarse_input = torch.cat((x[:, 1: 1+grid*grid*2].reshape(-1, 2, grid, grid),
-                                        x[:, 1+grid*grid*3: 1+grid*grid*4].reshape(-1, 1, grid, grid)
-                                        ),dim= 1).reshape(-1, 3, grid, grid)
+                                    x[:, 1+grid*grid*3: 1+grid*grid*4].reshape(-1, 1, grid, grid)
+                                    ),dim= 1).reshape(-1, 3, grid, grid)
             cnn_coarse_res = self.cnn_coarse(coarse_input)
             cnn_res = self.merge(torch.cat((cnn_res, cnn_coarse_res), dim=1))
+        
         net_img = x[:, 1+grid*grid: 1+grid*grid*2]
         net_img = net_img + x[:, 1+grid*grid*2: 1+grid*grid*3] * 10
         net_img_min = net_img.min() + args.soft_coefficient
@@ -123,7 +127,7 @@ class Actor(nn.Module):
 
         x = cnn_res
         x = x.reshape(-1, grid * grid)
-        x = torch.where(mask + mask2 >=1.0, -1.0e10, x.double())
+        x = torch.where(mask + mask2 >=1.0, -1.0e10, x.float())
         x = self.softmax(x)
 
         return x, cnn_res, gcn_res
@@ -141,11 +145,14 @@ class Critic(nn.Module):
     def forward(self, x, action, graph = None, cnn_res = None, gcn_res = None, graph_node = None):
         # Ensure all inputs are float32
         x = x.float()
-        action = action.float()
         
-        # Ensure action is the right shape (batch_size x 1)
-        if len(action.shape) == 1:
-            action = action.unsqueeze(1)
+        # Handle action input - it could be either probabilities or a single action
+        if action.shape[-1] == grid * grid:  # If it's action probabilities
+            action = torch.argmax(action, dim=1, keepdim=True).float()
+        else:
+            action = action.float()
+            if len(action.shape) == 1:
+                action = action.unsqueeze(1)
         
         # Get position embedding and ensure it's float32
         pos_emb = self.pos_emb(x[:, 0].long()).float()  # Shape: (batch_size, 64)
