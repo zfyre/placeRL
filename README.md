@@ -175,9 +175,10 @@ r_t = (HPWL_{t-1} - HPWL_t) - λ_cong|Cong_t - Cong_{t-1}| - λ_dens|Dens_t - De
 
 ---
 
-## Experimental Report
+## Resources
 
-[Adaptec-1 and Ariane Experimental Results using DDPG and PPO](https://wandb.ai/zfyre-iit-roorkee/placerl/reports/Experimental-Results---VmlldzoxMjU3NjQwMg)
+- [Experimental Results (WandB)](https://wandb.ai/zfyre-iit-roorkee/placerl/reports/Experimental-Results---VmlldzoxMjU3NjQwMg) - Adaptec-1 and Ariane results using DDPG and PPO
+- [Project Presentation](https://docs.google.com/presentation/d/1QEQvGhiQygdD5Cl0OwyKmVFVcGoVZxndGixsreXppHY/edit?slide=id.g338bb720770_2_42#slide=id.g338bb720770_2_42) - Detailed slides on methodology and results
 
 ---
 
